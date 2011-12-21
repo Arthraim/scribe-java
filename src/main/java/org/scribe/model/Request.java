@@ -7,7 +7,6 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 import org.scribe.exceptions.*;
-import org.scribe.utils.*;
 
 /**
  * Represents an HTTP Request object
@@ -17,16 +16,21 @@ import org.scribe.utils.*;
 class Request
 {
   private static final String CONTENT_LENGTH = "Content-Length";
+  private static final String CONTENT_TYPE = "Content-Type";
+  public static final String DEFAULT_CONTENT_TYPE = "application/x-www-form-urlencoded";
 
   private String url;
   private Verb verb;
-  private Map<String, String> querystringParams;
-  private Map<String, String> bodyParams;
+  private ParameterList querystringParams;
+  private ParameterList bodyParams;
   private Map<String, String> headers;
   private String payload = null;
   private HttpURLConnection connection;
   private String charset;
   private byte[] bytePayload = null;
+  private boolean connectionKeepAlive = false;
+  private Long connectTimeout = null;
+  private Long readTimeout = null;
 
   /**
    * Creates a new Http Request
@@ -38,8 +42,8 @@ class Request
   {
     this.verb = verb;
     this.url = url;
-    this.querystringParams = new HashMap<String, String>();
-    this.bodyParams = new HashMap<String, String>();
+    this.querystringParams = new ParameterList();
+    this.bodyParams = new ParameterList();
     this.headers = new HashMap<String, String>();
   }
 
@@ -56,25 +60,48 @@ class Request
     {
       createConnection();
       return doSend();
-    } catch (IOException ioe)
+    }
+    catch (UnknownHostException uhe)
     {
-      throw new OAuthException("Problems while creating connection", ioe);
+      throw new OAuthException("Could not reach the desired host. Check your network connection.", uhe);
+    }
+    catch (IOException ioe)
+    {
+      throw new OAuthException("Problems while creating connection.", ioe);
     }
   }
 
   private void createConnection() throws IOException
   {
-    String effectiveUrl = URLUtils.appendParametersToQueryString(url, querystringParams);
+    String completeUrl = getCompleteUrl();
     if (connection == null)
     {
-      System.setProperty("http.keepAlive", "false");
-      connection = (HttpURLConnection) new URL(effectiveUrl).openConnection();
+      System.setProperty("http.keepAlive", connectionKeepAlive ? "true" : "false");
+      connection = (HttpURLConnection) new URL(completeUrl).openConnection();
     }
+  }
+
+  /**
+   * Returns the complete url (host + resource + encoded querystring parameters).
+   *
+   * @return the complete url.
+   */
+  public String getCompleteUrl()
+  {
+    return querystringParams.appendTo(url);
   }
 
   Response doSend() throws IOException
   {
     connection.setRequestMethod(this.verb.name());
+    if (connectTimeout != null) 
+    {
+      connection.setConnectTimeout(connectTimeout.intValue());
+    }
+    if (readTimeout != null)
+    {
+      connection.setReadTimeout(readTimeout.intValue());
+    }
     addHeaders(connection);
     if (verb.equals(Verb.PUT) || verb.equals(Verb.POST))
     {
@@ -92,6 +119,12 @@ class Request
   void addBody(HttpURLConnection conn, byte[] content) throws IOException
   {
     conn.setRequestProperty(CONTENT_LENGTH, String.valueOf(content.length));
+
+    // Set default content type if none is set.
+    if (conn.getRequestProperty(CONTENT_TYPE) == null)
+    {
+      conn.setRequestProperty(CONTENT_TYPE, DEFAULT_CONTENT_TYPE);
+    }
     conn.setDoOutput(true);
     conn.getOutputStream().write(content);
   }
@@ -115,7 +148,7 @@ class Request
    */
   public void addBodyParameter(String key, String value)
   {
-    this.bodyParams.put(key, value);
+    this.bodyParams.add(key, value);
   }
 
   /**
@@ -126,7 +159,7 @@ class Request
    */
   public void addQuerystringParameter(String key, String value)
   {
-    this.querystringParams.put(key, value);
+    this.querystringParams.add(key, value);
   }
 
   /**
@@ -155,20 +188,20 @@ class Request
   }
 
   /**
-   * Get a {@link Map} of the query string parameters.
+   * Get a {@link ParameterList} with the query string parameters.
    * 
-   * @return a map containing the query string parameters
-   * @throws OAuthException if the URL is not valid
+   * @return a {@link ParameterList} containing the query string parameters.
+   * @throws OAuthException if the request URL is not valid.
    */
-  public Map<String, String> getQueryStringParams()
+  public ParameterList getQueryStringParams()
   {
     try
     {
-      Map<String, String> params = new HashMap<String, String>();
+      ParameterList result = new ParameterList();
       String queryString = new URL(url).getQuery();
-      params.putAll(URLUtils.queryStringToMap(queryString));
-      params.putAll(this.querystringParams);
-      return params;
+      result.addQuerystring(queryString);
+      result.addAll(querystringParams);
+      return result;
     }
     catch (MalformedURLException mue)
     {
@@ -177,11 +210,11 @@ class Request
   }
 
   /**
-   * Obtains a {@link Map} of the body parameters.
+   * Obtains a {@link ParameterList} of the body parameters.
    * 
-   * @return a map containing the body parameters.
+   * @return a {@link ParameterList}containing the body parameters.
    */
-  public Map<String, String> getBodyParams()
+  public ParameterList getBodyParams()
   {
     return bodyParams;
   }
@@ -227,7 +260,7 @@ class Request
   byte[] getByteBodyContents()
   {
     if (bytePayload != null) return bytePayload;
-    String body = (payload != null) ? payload : URLUtils.formURLEncodeMap(bodyParams);
+    String body = (payload != null) ? payload : bodyParams.asFormUrlEncodedString();
     try
     {
       return body.getBytes(getCharset());
@@ -277,7 +310,7 @@ class Request
    */
   public void setConnectTimeout(int duration, TimeUnit unit)
   {
-    this.connection.setConnectTimeout((int) unit.toMillis(duration));
+    this.connectTimeout = unit.toMillis(duration);
   }
 
   /**
@@ -289,7 +322,7 @@ class Request
    */
   public void setReadTimeout(int duration, TimeUnit unit)
   {
-    this.connection.setReadTimeout((int) unit.toMillis(duration));
+    this.readTimeout = unit.toMillis(duration);
   }
 
   /**
@@ -300,6 +333,17 @@ class Request
   public void setCharset(String charsetName)
   {
     this.charset = charsetName;
+  }
+
+  /**
+   * Sets whether the underlying Http Connection is persistent or not.
+   *
+   * @see http://download.oracle.com/javase/1.5.0/docs/guide/net/http-keepalive.html
+   * @param connectionKeepAlive
+   */
+  public void setConnectionKeepAlive(boolean connectionKeepAlive)
+  {
+    this.connectionKeepAlive = connectionKeepAlive;
   }
 
   /*

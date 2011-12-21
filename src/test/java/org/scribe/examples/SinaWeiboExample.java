@@ -7,17 +7,21 @@ import org.scribe.builder.api.*;
 import org.scribe.model.*;
 import org.scribe.oauth.*;
 
-public class SinaWeiboExample {
+public class SinaWeiboExample
+{
 	private static final String NETWORK_NAME = "SinaWeibo";
 	private static final String PROTECTED_RESOURCE_URL = "http://api.t.sina.com.cn/account/verify_credentials.json";
 
-	public static void main(String[] args) {
+	public static void main(String[] args)
+	{
 		// Replace these with your own api key and secret
 		String apiKey = "your key";
 		String apiSecret = "your secret";
 		OAuthService service = new ServiceBuilder()
-				.provider(SinaWeiboApi.class).apiKey(apiKey)
-				.apiSecret(apiSecret).build();
+				                        .provider(SinaWeiboApi.class)
+				                        .apiKey(apiKey)
+				                        .apiSecret(apiSecret)
+				                        .build();
 		Scanner in = new Scanner(System.in);
 
 		System.out.println("=== " + NETWORK_NAME + "'s OAuth Workflow ===");
@@ -60,6 +64,5 @@ public class SinaWeiboExample {
 
 		System.out.println();
 		System.out.println("Thats it man! Go and build something awesome with Scribe! :)");
-
 	}
 }

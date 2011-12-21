@@ -1,51 +1,22 @@
 package org.scribe.utils;
 
-import java.util.*;
+import java.util.Map;
 
 /**
- * Utils for {@link Map} manipulation
- * 
- * @author Pablo Fernandez
+ * @author: Pablo Fernandez
  */
 public class MapUtils
 {
-  /**
-   * Sorts a Map
-   * 
-   * @param map unsorted map
-   * @return sorted map
-   */
-  public static final Map<String, String> sort(Map<String, String> map)
+  public static <K,V> String toString(Map<K,V> map)
   {
-    Preconditions.checkNotNull(map, "Cannot sort a null object.");
+    if (map == null) return "";
+    if (map.isEmpty()) return "{}";
 
-    Map<String, String> sorted = new LinkedHashMap<String, String>();
-    for (String key : getSortedKeys(map))
+    StringBuilder result = new StringBuilder();
+    for(Map.Entry<K,V> entry : map.entrySet())
     {
-      sorted.put(key, map.get(key));
+      result.append(String.format(", %s -> %s ", entry.getKey().toString(), entry.getValue().toString()));
     }
-    return sorted;
-  }
-
-  private static List<String> getSortedKeys(Map<String, String> map)
-  {
-    List<String> keys = new ArrayList<String>(map.keySet());
-    Collections.sort(keys);
-    return keys;
-  }
-
-  /**
-   * Form-urlDecodes and appends all keys from the source {@link Map} to the
-   * target {@link Map}
-   *
-   * @param source Map from where the keys get copied and decoded
-   * @param target Map where the decoded keys are copied to
-   */
-  public static void decodeAndAppendEntries(Map<String, String> source, Map<String, String> target)
-  {
-    for (String key: source.keySet())
-    {
-      target.put(URLUtils.percentEncode(key), URLUtils.percentEncode(source.get(key)));
-    }
+    return "{" + result.substring(1) + "}";
   }
 }
